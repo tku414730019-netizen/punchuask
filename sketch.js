@@ -140,12 +140,12 @@ function drawRyu() {
 function handleChunLiMovement() {
   chunLi.vx = 0;
 
-  if (keyIsDown(LEFT_ARROW) || keyIsDown(65)) {
+  if (keyIsDown(LEFT_ARROW)) {
     chunLi.vx = -5;
     chunLi.facing = -1;
     if (!chunLi.isJumping) chunLi.currentAnimation = "walk";
   }
-  if (keyIsDown(RIGHT_ARROW) || keyIsDown(68)) {
+  if (keyIsDown(RIGHT_ARROW)) {
     chunLi.vx = 5;
     chunLi.facing = 1;
     if (!chunLi.isJumping) chunLi.currentAnimation = "walk";
@@ -379,7 +379,7 @@ function keyPressed() {
   }
 
   // Jump
-  if ((keyCode === UP_ARROW || key === "W" || key === "w") && !chunLi.isJumping) {
+  if ((keyCode === UP_ARROW) && !chunLi.isJumping) {
     chunLi.isJumping = true;
     chunLi.vy = -18;
     chunLi.currentAnimation = "jumpAir";
