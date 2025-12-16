@@ -1,4 +1,6 @@
 let bg, quizTable;
+let worldX = 0;   // 世界的水平位移（鏡頭）
+
 
 // ================= Animations =================
 let chunLiAnimations = {
@@ -69,9 +71,12 @@ function setup() {
   cutFrames(sheets.ryuStay, 118, 186, ryuAnimations.stay);
   cutFrames(sheets.ryuHit, 165, 165, ryuAnimations.hit);
 
+  chunLi.x = width / 2;
   chunLi.y = height - 200;
+
+  ryu.x = 600;   // Ryu 在世界中的位置
   ryu.y = height - 200;
-  ryu.x = width / 2;
+
 }
 
 // ================= Draw =================
@@ -102,14 +107,22 @@ function cutFrames(sheet, w, h, arr) {
 }
 
 function drawBackgroundCover(img) {
-  let r1 = img.width / img.height;
-  let r2 = width / height;
-  let w, h;
-  if (r2 > r1) { w = width; h = width / r1; }
-  else { h = height; w = height * r1; }
-  imageMode(CENTER);
-  image(img, width / 2, height / 2, w, h);
+  let scaleH = height / img.height;
+  let drawW = img.width * scaleH;
+  let drawH = height;
+
+  // 根據 worldX 計算起始位置（循環）
+  let startX = -(worldX % drawW);
+
+  imageMode(CORNER);
+
+  // 至少畫 3 張，確保覆蓋整個畫面
+  for (let x = startX - drawW; x < width + drawW; x += drawW) {
+    image(img, x, 0, drawW, drawH);
+  }
 }
+
+
 
 // ================= Draw Characters =================
 function drawChunLi() {
@@ -117,7 +130,8 @@ function drawChunLi() {
   if (!a || a.length === 0) return;
   let i = floor(chunLi.frameIndex / chunLi.frameSpeed) % a.length;
   push();
-  translate(chunLi.x, chunLi.y);
+  translate(width / 2, chunLi.y);
+
   scale(chunLi.facing, 1);
   imageMode(CENTER);
   image(a[i], 0, 0);
@@ -129,7 +143,8 @@ function drawRyu() {
   if (!a || a.length === 0) return;
   let i = floor(ryu.frameIndex / ryu.frameSpeed) % a.length;
   push();
-  translate(ryu.x, ryu.y);
+  translate(ryu.x - worldX, ryu.y);
+
   scale(ryu.facing, 1);
   imageMode(CENTER);
   image(a[i], 0, 0);
@@ -155,8 +170,8 @@ function handleChunLiMovement() {
     chunLi.currentAnimation = "stay";
   }
 
-  chunLi.x += chunLi.vx;
-  chunLi.x = constrain(chunLi.x, 50, width - 50);
+  worldX += chunLi.vx;
+
 }
 
 function applyChunLiJump() {
@@ -182,8 +197,10 @@ function updateChunLiAnimation() {
 }
 
 function updateRyuFacing() {
-  ryu.facing = chunLi.x < ryu.x ? -1 : 1;
+  let chunLiWorldX = worldX + width / 2;
+  ryu.facing = chunLiWorldX < ryu.x ? -1 : 1;
 }
+
 
 function updateRyuAnimation() {
   ryu.frameIndex++;
@@ -198,10 +215,13 @@ function updateRyuAnimation() {
 function updateBombs() {
   for (let i = bombs.length - 1; i >= 0; i--) {
     let b = bombs[i];
+
+    // ===== 世界座標移動 =====
     b.x += b.vx;
 
-    let distance = dist(b.x, b.y, ryu.x, ryu.y);
-    if (distance < 60) {
+    // ===== 與 Ryu 的碰撞（世界座標）=====
+    let d = dist(b.x, b.y, ryu.x, ryu.y);
+    if (d < 60) {
       ryu.currentAnimation = "hit";
       ryu.frameIndex = 0;
       score++;
@@ -209,33 +229,46 @@ function updateBombs() {
       continue;
     }
 
+    // ===== 畫面座標繪製 =====
     if (bombFrames.length > 0) {
-      let frame = bombFrames[floor(chunLi.frameIndex / chunLi.frameSpeed) % bombFrames.length];
+      let frame = bombFrames[
+        floor(chunLi.frameIndex / chunLi.frameSpeed) % bombFrames.length
+      ];
+
       push();
-      translate(b.x, b.y);
-      scale(b.facing, 1);
+      translate(b.x - worldX, b.y);
+      scale(b.facing, 1);   // ★ 關鍵
       imageMode(CENTER);
       image(frame, 0, 0);
       pop();
+
     }
 
-    if (b.x < -50 || b.x > width + 50) {
+    // ===== 超出畫面移除 =====
+    if (b.x - worldX < -100 || b.x - worldX > width + 100) {
       bombs.splice(i, 1);
     }
   }
 }
 
+
 // ================= Dialogue Logic =================
 function handleDialogue() {
-  let d = dist(chunLi.x, chunLi.y, ryu.x, ryu.y);
+  let d = dist(width / 2, chunLi.y, ryu.x - worldX, ryu.y);
+  let ryuScreenX = ryu.x - worldX;
+  let chunLiScreenX = width / 2;
+
 
   // 離開範圍時重置對話狀態
   if (d > 200) {
-    dialogState = "none";
-    inputActive = false;
-    inputText = "";
+    if (dialogState !== "welcome" && dialogState !== "quizResult") {
+      dialogState = "none";
+      inputActive = false;
+      inputText = "";
+    }
     return;
   }
+
 
   // 進入範圍且尚未開始對話
   if (dialogState === "none") {
@@ -272,34 +305,38 @@ function handleDialogue() {
 
 // ================= Dialogue UI =================
 function drawDialogueBox(ryuText, chunLiText) {
+  let ryuScreenX = ryu.x - worldX;
+  let chunLiScreenX = width / 2;
+
   push();
   textAlign(CENTER);
   textSize(16);
-  
-  // ---- Ryu 對話框 ----
+
+  // ===== Ryu 對話框 =====
   fill(255, 255, 255, 230);
   stroke(0);
   strokeWeight(2);
-  rect(ryu.x - 80, ryu.y - 138, 160, 30, 10);
-  
+  rect(ryuScreenX - 80, ryu.y - 138, 160, 30, 10);
+
   noStroke();
   fill(0);
-  text(ryuText, ryu.x, ryu.y - 130);
-  
-  // ---- Chun Li 輸入框 (只在輸入時顯示) ----
+  text(ryuText, ryuScreenX, ryu.y - 130);
+
+  // ===== Chun Li 輸入框 =====
   if (inputActive && chunLiText !== "") {
     fill(255, 255, 255, 230);
     stroke(0);
     strokeWeight(2);
-    rect(chunLi.x - 80, chunLi.y - 138, 160, 30, 10);
-    
+    rect(chunLiScreenX - 50, chunLi.y - 138, 100, 30, 10);
+
     noStroke();
     fill(0);
-    text(chunLiText, chunLi.x, chunLi.y - 130);
+    text(chunLiText, chunLiScreenX, chunLi.y - 130);
   }
-  
+
   pop();
 }
+
 
 function drawChunLiInputBox(content) {
   push();
@@ -316,18 +353,49 @@ function drawChunLiInputBox(content) {
 }
 
 function drawRyuQuizBox(textContent) {
+  let ryuScreenX = ryu.x - worldX;
+
+  let padding = 20;
+  let boxWidth = 300;
+  let textWidthLimit = boxWidth - padding * 2;
+  let lineHeight = 18;
+
+  // 計算實際文字高度
+  textSize(14);
+  let textLines = textContent.split("\n");
+  let totalLines = 0;
+
+  for (let line of textLines) {
+    totalLines += ceil(textWidth(line) / textWidthLimit);
+  }
+
+  let boxHeight = totalLines * lineHeight + padding * 2;
+
   push();
   fill(255, 255, 255, 230);
   stroke(0);
   strokeWeight(3);
-  rect(ryu.x - 150, ryu.y - 200, 300, 150, 10);
+  rect(
+    ryuScreenX - boxWidth / 2,
+    ryu.y - boxHeight -100,
+    boxWidth,
+    boxHeight,
+    10
+  );
+
   fill(0);
   noStroke();
   textAlign(LEFT, TOP);
   textSize(14);
-  text(textContent, ryu.x - 140, ryu.y - 190, 280);
+  text(
+    textContent,
+    ryuScreenX - boxWidth / 2 + padding-5,
+    ryu.y - boxHeight -100 + padding-5,
+    textWidthLimit
+  );
   pop();
 }
+
 
 // ================= Quiz =================
 function nextQuiz() {
@@ -391,12 +459,13 @@ function keyPressed() {
     chunLi.frameIndex = 0;
 
     bombs.push({
-      x: chunLi.x + (chunLi.facing * 50),
+      x: worldX + width / 2 + (chunLi.facing * 50), // 世界座標
       y: chunLi.y - 40,
       vx: 12 * chunLi.facing,
       facing: chunLi.facing
-    });
+    }); 
   }
+
 }
 
 // ================= Score =================
