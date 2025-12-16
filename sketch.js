@@ -1,6 +1,9 @@
 let bg, quizTable;
 let worldX = 0;   // 世界的水平位移（鏡頭）
 
+// ================= 教學彈窗 =================
+let showTutorial = true;  // ★ 新增：控制彈窗顯示
+let gameSound, bgMusic;   // ★ 新增：音效變數（可選）
 
 // ================= Animations =================
 let chunLiAnimations = {
@@ -55,6 +58,10 @@ function preload() {
   sheets.ryuHit = loadImage("ryu/hit/165x165.png");
 
   quizTable = loadTable("ryu/quiz.csv", "csv", "header");
+  
+  // ★ 如果有音效檔案可以在這裡載入
+  // gameSound = loadSound("sound.mp3");
+  // bgMusic = loadSound("bgmusic.mp3");
 }
 
 // ================= Setup =================
@@ -76,26 +83,33 @@ function setup() {
 
   ryu.x = 600;   // Ryu 在世界中的位置
   ryu.y = height - 200;
-
 }
 
 // ================= Draw =================
 function draw() {
   drawBackgroundCover(bg);
 
-  handleChunLiMovement();
-  applyChunLiJump();
-  updateChunLiAnimation();
+  // ★ 只有在彈窗關閉時才更新遊戲
+  if (!showTutorial) {
+    handleChunLiMovement();
+    applyChunLiJump();
+    updateChunLiAnimation();
 
-  updateRyuFacing();
-  updateRyuAnimation();
-  updateBombs();
+    updateRyuFacing();
+    updateRyuAnimation();
+    updateBombs();
+
+    handleDialogue();
+  }
 
   drawChunLi();
   drawRyu();
-
-  handleDialogue();
   drawScore();
+  
+  // ★ 新增：顯示彈窗
+  if (showTutorial) {
+    drawTutorialPopup();
+  }
 }
 
 // ================= Utilities =================
@@ -121,8 +135,6 @@ function drawBackgroundCover(img) {
     image(img, x, 0, drawW, drawH);
   }
 }
-
-
 
 // ================= Draw Characters =================
 function drawChunLi() {
@@ -171,7 +183,6 @@ function handleChunLiMovement() {
   }
 
   worldX += chunLi.vx;
-
 }
 
 function applyChunLiJump() {
@@ -200,7 +211,6 @@ function updateRyuFacing() {
   let chunLiWorldX = worldX + width / 2;
   ryu.facing = chunLiWorldX < ryu.x ? -1 : 1;
 }
-
 
 function updateRyuAnimation() {
   ryu.frameIndex++;
@@ -237,11 +247,10 @@ function updateBombs() {
 
       push();
       translate(b.x - worldX, b.y);
-      scale(b.facing, 1);   // ★ 關鍵
+      scale(b.facing, 1);
       imageMode(CENTER);
       image(frame, 0, 0);
       pop();
-
     }
 
     // ===== 超出畫面移除 =====
@@ -251,13 +260,11 @@ function updateBombs() {
   }
 }
 
-
 // ================= Dialogue Logic =================
 function handleDialogue() {
   let d = dist(width / 2, chunLi.y, ryu.x - worldX, ryu.y);
   let ryuScreenX = ryu.x - worldX;
   let chunLiScreenX = width / 2;
-
 
   // 離開範圍時重置對話狀態
   if (d > 200) {
@@ -268,7 +275,6 @@ function handleDialogue() {
     }
     return;
   }
-
 
   // 進入範圍且尚未開始對話
   if (dialogState === "none") {
@@ -337,18 +343,17 @@ function drawDialogueBox(ryuText, chunLiText) {
   pop();
 }
 
-
 function drawChunLiInputBox(content) {
   push();
   fill(255, 255, 255, 230);
   stroke(0);
   strokeWeight(2);
-  rect(chunLi.x - 80, chunLi.y - 138, 160, 30, 10);
+  rect(width / 2 - 80, chunLi.y - 138, 160, 30, 10);
   fill(0);
   noStroke();
   textAlign(CENTER);
   textSize(14);
-  text(content, chunLi.x, chunLi.y - 130);
+  text(content, width / 2, chunLi.y - 130);
   pop();
 }
 
@@ -377,7 +382,7 @@ function drawRyuQuizBox(textContent) {
   strokeWeight(3);
   rect(
     ryuScreenX - boxWidth / 2,
-    ryu.y - boxHeight -100,
+    ryu.y - boxHeight - 100,
     boxWidth,
     boxHeight,
     10
@@ -389,13 +394,12 @@ function drawRyuQuizBox(textContent) {
   textSize(14);
   text(
     textContent,
-    ryuScreenX - boxWidth / 2 + padding-5,
-    ryu.y - boxHeight -100 + padding-5,
+    ryuScreenX - boxWidth / 2 + padding - 5,
+    ryu.y - boxHeight - 100 + padding - 5,
     textWidthLimit
   );
   pop();
 }
-
 
 // ================= Quiz =================
 function nextQuiz() {
@@ -420,6 +424,9 @@ function nextQuiz() {
 
 // ================= Input =================
 function keyPressed() {
+  // ★ 彈窗顯示時不處理按鍵
+  if (showTutorial) return;
+  
   if (inputActive) {
     if (keyCode === ENTER) {
       if (dialogState === "askName") {
@@ -459,13 +466,12 @@ function keyPressed() {
     chunLi.frameIndex = 0;
 
     bombs.push({
-      x: worldX + width / 2 + (chunLi.facing * 50), // 世界座標
+      x: worldX + width / 2 + (chunLi.facing * 50),
       y: chunLi.y - 40,
       vx: 12 * chunLi.facing,
       facing: chunLi.facing
     }); 
   }
-
 }
 
 // ================= Score =================
@@ -476,4 +482,92 @@ function drawScore() {
   textSize(24);
   textAlign(LEFT, TOP);
   text("Score: " + score, 20, 30);
+}
+
+// ====================== 使用說明彈窗 ======================
+function drawTutorialPopup() {
+  push();
+
+  // 半透明黑色背景
+  fill(0, 150);
+  noStroke();
+  rect(0, 0, width, height);
+
+  // 白色彈窗本體
+  let w = 500;
+  let h = 320;
+  let x = (width - w) / 2;
+  let y = (height - h) / 2;
+
+  fill(255);
+  stroke(0);
+  strokeWeight(2);
+  rect(x, y, w, h, 12);
+
+  // 文字內容
+  fill(0);
+  noStroke();
+  textSize(18);
+  textAlign(CENTER, TOP);
+
+  let msg = 
+    "使用說明\n\n" +
+    "靠近ryu，他會詢問你的名字，\n" +
+    "他們會隨機問你程式相關的問題。\n\n" +
+    "也可以使用空白鍵發射砲彈攻擊。\n\n" +
+    "往兩側走，是無限延伸的世界。\n" +
+    "努力答對所有題目吧！";
+
+  text(msg, width / 2, y + 25);
+
+  // OK 按鈕
+  let btnW = 120;
+  let btnH = 40;
+  let btnX = width / 2 - btnW / 2;
+  let btnY = y + h - 60;
+
+  fill(230);
+  stroke(0);
+  strokeWeight(2);
+  rect(btnX, btnY, btnW, btnH, 8);
+
+  fill(0);
+  noStroke();
+  textSize(20);
+  text("OK", width / 2, btnY + btnH / 2 - 8);
+
+  pop();
+}
+
+function mousePressed() {
+  // 如果彈窗存在 → 檢查是否點擊 OK
+  if (showTutorial) {
+    let w = 500;
+    let h = 320;
+    let x = (width - w) / 2;
+    let y = (height - h) / 2;
+
+    let btnW = 120;
+    let btnH = 40;
+    let btnX = width / 2 - btnW / 2;
+    let btnY = y + h - 60;
+
+    // 點擊 OK 按鈕
+    if (mouseX > btnX && mouseX < btnX + btnW &&
+        mouseY > btnY && mouseY < btnY + btnH) {
+
+      showTutorial = false;  // 關閉彈窗
+      
+      // 播放音效（如果有載入）
+      if (typeof gameSound !== 'undefined' && gameSound) {
+        gameSound.play();
+      }
+      
+      // 開始播放背景音樂（循環）（如果有載入）
+      if (typeof bgMusic !== 'undefined' && bgMusic && !bgMusic.isPlaying()) {
+        bgMusic.loop();
+      }
+    }
+    return; // 不處理其他點擊
+  }
 }
